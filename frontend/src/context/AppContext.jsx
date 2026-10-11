@@ -1,7 +1,7 @@
-import { createContext, useContext, useEffect, useState } from "react";
+import { createContext, useEffect, useState } from "react";
 import { initialBookings } from "../data/mockData";
 
-const AppContext = createContext(null);
+export const AppContext = createContext(null);
 
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000/api";
 const STORAGE_KEY = "fixit_bookings_v1";
@@ -111,14 +111,4 @@ export function AppProvider({ children }) {
       {children}
     </AppContext.Provider>
   );
-}
-
-export function useApp() {
-  const ctx = useContext(AppContext);
-
-  if (!ctx) {
-    throw new Error("useApp must be used within an AppProvider");
-  }
-
-  return ctx;
 }

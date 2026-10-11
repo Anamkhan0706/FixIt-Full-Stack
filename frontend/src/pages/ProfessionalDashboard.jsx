@@ -23,8 +23,7 @@ function ProfessionalDashboard() {
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
 
-  const [lastKnownBookingIds, setLastKnownBookingIds] =
-    useState([]);
+  const [, setLastKnownBookingIds] = useState([]);
 
   const lastKnownBookingIdsRef =
     useRef([]);

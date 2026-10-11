@@ -6,7 +6,7 @@ import {
   ArrowLeft,
   CheckCircle2,
 } from "lucide-react";
-import { useApp } from "../context/AppContext";
+import { useApp } from "../context/useApp";
 import StarRating from "../components/StarRating";
 
 const API_URL =
