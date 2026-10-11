@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ArrowDown,
   Bell,
@@ -17,25 +17,16 @@ function ProfessionalDashboard() {
   const [bookings, setBookings] = useState([]);
 
   const [loading, setLoading] = useState(true);
-  const [bookingsLoading, setBookingsLoading] =
-    useState(false);
+  const [bookingsLoading, setBookingsLoading] = useState(false);
 
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
 
-  const [, setLastKnownBookingIds] = useState([]);
+  const lastKnownBookingIdsRef = useRef([]);
+  const notificationInitializedRef = useRef(false);
 
-  const lastKnownBookingIdsRef =
-    useRef([]);
-
-  const [showNotification, setShowNotification] =
-    useState(false);
-
-  const [notificationCount, setNotificationCount] =
-    useState(0);
-
-  const [notificationInitialized, setNotificationInitialized] =
-    useState(false);
+  const [showNotification, setShowNotification] = useState(false);
+  const [notificationCount, setNotificationCount] = useState(0);
 
   const [formData, setFormData] = useState({
     name: "",
@@ -47,51 +38,42 @@ function ProfessionalDashboard() {
     availability: true,
   });
 
-  const loadBookings = async (
-    checkForNewOrders = false
-  ) => {
-    if (!token) return;
+  const loadBookings = useCallback(
+    async (checkForNewOrders = false) => {
+      if (!token) {
+        setBookings([]);
+        setBookingsLoading(false);
+        return;
+      }
 
-    try {
-      setBookingsLoading(true);
+      try {
+        setBookingsLoading(true);
 
-      const response = await fetch(
-        `${API_URL}/bookings`,
-        {
+        const response = await fetch(`${API_URL}/bookings`, {
           headers: {
             Authorization: `Bearer ${token}`,
           },
+        });
+
+        const data = await response.json();
+
+        if (!response.ok) {
+          throw new Error(
+            data.message || "Failed to load bookings"
+          );
         }
-      );
 
-      const data = await response.json();
+        const currentBookings = data.bookings || [];
 
-      if (!response.ok) {
-        throw new Error(
-          data.message || "Failed to load bookings"
-        );
-      }
-
-      const currentBookings =
-        data.bookings || [];
-
-      const currentBookingIds =
-        currentBookings.map(
+        const currentBookingIds = currentBookings.map(
           (booking) => booking._id
         );
 
-      if (!notificationInitialized) {
-        setLastKnownBookingIds(
-          currentBookingIds
-        );
-
-        lastKnownBookingIdsRef.current =
-          currentBookingIds;
-
-        setNotificationInitialized(true);
-      } else if (checkForNewOrders) {
-        const newPendingBookings =
-          currentBookings.filter(
+        if (!notificationInitializedRef.current) {
+          lastKnownBookingIdsRef.current = currentBookingIds;
+          notificationInitializedRef.current = true;
+        } else if (checkForNewOrders) {
+          const newPendingBookings = currentBookings.filter(
             (booking) =>
               booking.status === "pending" &&
               !lastKnownBookingIdsRef.current.includes(
@@ -99,360 +81,239 @@ function ProfessionalDashboard() {
               )
           );
 
-        if (newPendingBookings.length > 0) {
-          setNotificationCount(
-            (previousCount) =>
-              previousCount +
-              newPendingBookings.length
-          );
+          if (newPendingBookings.length > 0) {
+            setNotificationCount(
+              (previousCount) =>
+                previousCount + newPendingBookings.length
+            );
 
-          setShowNotification(true);
+            setShowNotification(true);
+          }
+
+          lastKnownBookingIdsRef.current = currentBookingIds;
         }
 
-        setLastKnownBookingIds(
-          currentBookingIds
-        );
-
-        lastKnownBookingIdsRef.current =
-          currentBookingIds;
+        setBookings(currentBookings);
+      } catch (err) {
+        console.error("Load bookings error:", err);
+        setError(err.message || "Failed to load bookings.");
+      } finally {
+        setBookingsLoading(false);
       }
+    },
+    [token]
+  );
 
-      setBookings(currentBookings);
-    } catch (err) {
-      console.error(
-        "Load bookings error:",
-        err
+  const loadProfessionalData = useCallback(async () => {
+    if (!token) {
+      setError(
+        "You must be logged in as a professional."
+      );
+      setLoading(false);
+      return;
+    }
+
+    try {
+      setLoading(true);
+      setError("");
+
+      const profileResponse = await fetch(
+        `${API_URL}/professionals`,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }
       );
 
-      setError(err.message);
+      const profileData = await profileResponse.json();
+
+      if (!profileResponse.ok) {
+        throw new Error(
+          profileData.message ||
+            "Failed to load professional profile"
+        );
+      }
+
+      const professionals = profileData.professionals || [];
+
+      const userData = JSON.parse(
+        localStorage.getItem("fixit_user") || "null"
+      );
+
+      const currentProfessional = professionals.find(
+        (professional) =>
+          professional.user?._id === userData?.id ||
+          professional.user === userData?.id
+      );
+
+      if (currentProfessional) {
+        setProfile(currentProfessional);
+
+        setFormData({
+          name: currentProfessional.name || "",
+          service: currentProfessional.service || "",
+          experience: currentProfessional.experience ?? "",
+          description: currentProfessional.description || "",
+          location: currentProfessional.location || "",
+          price: currentProfessional.price ?? "",
+          availability:
+            currentProfessional.availability ?? true,
+        });
+      }
+
+      await loadBookings(false);
+    } catch (err) {
+      console.error("Load professional data error:", err);
+      setError(
+        err.message || "Failed to load professional data."
+      );
     } finally {
-      setBookingsLoading(false);
+      setLoading(false);
     }
-  };
-
-  const loadProfessionalData =
-    async () => {
-      if (!token) {
-        setError(
-          "You must be logged in as a professional."
-        );
-        setLoading(false);
-        return;
-      }
-
-      try {
-        setLoading(true);
-        setError("");
-
-        const profileResponse =
-          await fetch(
-            `${API_URL}/professionals`,
-            {
-              headers: {
-                Authorization: `Bearer ${token}`,
-              },
-            }
-          );
-
-        const profileData =
-          await profileResponse.json();
-
-        if (!profileResponse.ok) {
-          throw new Error(
-            profileData.message ||
-              "Failed to load professional profile"
-          );
-        }
-
-        const professionals =
-          profileData.professionals || [];
-
-        const userData = JSON.parse(
-          localStorage.getItem(
-            "fixit_user"
-          ) || "null"
-        );
-
-        const currentProfessional =
-          professionals.find(
-            (professional) =>
-              professional.user?._id ===
-                userData?.id ||
-              professional.user ===
-                userData?.id
-          );
-
-        if (currentProfessional) {
-          setProfile(
-            currentProfessional
-          );
-
-          setFormData({
-            name:
-              currentProfessional.name ||
-              "",
-            service:
-              currentProfessional.service ||
-              "",
-            experience:
-              currentProfessional.experience ??
-              "",
-            description:
-              currentProfessional.description ||
-              "",
-            location:
-              currentProfessional.location ||
-              "",
-            price:
-              currentProfessional.price ??
-              "",
-            availability:
-              currentProfessional.availability ??
-              true,
-          });
-        }
-
-        await loadBookings(false);
-      } catch (err) {
-        console.error(
-          "Load professional data error:",
-          err
-        );
-
-        setError(err.message);
-      } finally {
-        setLoading(false);
-      }
-    };
+  }, [token, loadBookings]);
 
   useEffect(() => {
     loadProfessionalData();
-  }, []);
+  }, [loadProfessionalData]);
 
   useEffect(() => {
-    if (!token) return;
+    if (!token) return undefined;
 
     const interval = setInterval(() => {
       loadBookings(true);
     }, 10000);
 
-    return () =>
-      clearInterval(interval);
-  }, [token]);
+    return () => clearInterval(interval);
+  }, [token, loadBookings]);
 
-  const handleInputChange = (
-    event
-  ) => {
-    const {
-      name,
-      value,
-      type,
-      checked,
-    } = event.target;
+  const handleInputChange = (event) => {
+    const { name, value, type, checked } = event.target;
 
     setFormData((previous) => ({
       ...previous,
-      [name]:
-        type === "checkbox"
-          ? checked
-          : value,
+      [name]: type === "checkbox" ? checked : value,
     }));
   };
 
-  const handleUpdateProfile =
-    async (event) => {
-      event.preventDefault();
+  const handleUpdateProfile = async (event) => {
+    event.preventDefault();
 
-      if (!profile?._id) {
-        setError(
-          "Professional profile not found."
+    if (!profile?._id) {
+      setError("Professional profile not found.");
+      return;
+    }
+
+    try {
+      setError("");
+      setSuccess("");
+
+      const response = await fetch(
+        `${API_URL}/professionals/${profile._id}`,
+        {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            name: formData.name,
+            service: formData.service,
+            experience: Number(formData.experience),
+            description: formData.description,
+            location: formData.location,
+            price: Number(formData.price),
+            availability: formData.availability,
+          }),
+        }
+      );
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(
+          data.message || "Failed to update profile"
         );
-        return;
       }
 
-      try {
-        setError("");
-        setSuccess("");
+      setProfile(data.professional);
 
-        const response =
-          await fetch(
-            `${API_URL}/professionals/${profile._id}`,
-            {
-              method: "PUT",
-              headers: {
-                "Content-Type":
-                  "application/json",
-                Authorization: `Bearer ${token}`,
-              },
-              body: JSON.stringify({
-                name: formData.name,
-                service:
-                  formData.service,
-                experience: Number(
-                  formData.experience
-                ),
-                description:
-                  formData.description,
-                location:
-                  formData.location,
-                price: Number(
-                  formData.price
-                ),
-                availability:
-                  formData.availability,
-              }),
-            }
-          );
+      setFormData({
+        name: data.professional.name || "",
+        service: data.professional.service || "",
+        experience: data.professional.experience ?? "",
+        description: data.professional.description || "",
+        location: data.professional.location || "",
+        price: data.professional.price ?? "",
+        availability:
+          data.professional.availability ?? true,
+      });
 
-        const data =
-          await response.json();
+      setSuccess("Profile updated successfully.");
+    } catch (err) {
+      console.error("Update profile error:", err);
+      setError(err.message || "Failed to update profile.");
+    }
+  };
 
-        if (!response.ok) {
-          throw new Error(
-            data.message ||
-              "Failed to update profile"
-          );
+  const updateBookingStatus = async (bookingId, status) => {
+    try {
+      setError("");
+      setSuccess("");
+
+      const response = await fetch(
+        `${API_URL}/bookings/${bookingId}`,
+        {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({ status }),
         }
+      );
 
-        setProfile(
-          data.professional
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(
+          data.message || "Failed to update booking"
         );
-
-        setFormData({
-          name:
-            data.professional.name ||
-            "",
-          service:
-            data.professional.service ||
-            "",
-          experience:
-            data.professional.experience ??
-            "",
-          description:
-            data.professional.description ||
-            "",
-          location:
-            data.professional.location ||
-            "",
-          price:
-            data.professional.price ??
-            "",
-          availability:
-            data.professional.availability ??
-            true,
-        });
-
-        setSuccess(
-          "Profile updated successfully."
-        );
-      } catch (err) {
-        console.error(
-          "Update profile error:",
-          err
-        );
-
-        setError(err.message);
       }
-    };
 
-  const updateBookingStatus =
-    async (
-      bookingId,
-      status
-    ) => {
-      try {
-        setError("");
-        setSuccess("");
+      setBookings((previous) =>
+        previous.map((booking) =>
+          booking._id === bookingId
+            ? {
+                ...booking,
+                status: data.booking?.status || status,
+              }
+            : booking
+        )
+      );
 
-        const response =
-          await fetch(
-            `${API_URL}/bookings/${bookingId}`,
-            {
-              method: "PUT",
-              headers: {
-                "Content-Type":
-                  "application/json",
-                Authorization: `Bearer ${token}`,
-              },
-              body: JSON.stringify({
-                status,
-              }),
-            }
-          );
+      if (status === "confirmed") {
+        setSuccess("Order accepted successfully.");
 
-        const data =
-          await response.json();
-
-        if (!response.ok) {
-          throw new Error(
-            data.message ||
-              "Failed to update booking"
-          );
-        }
-
-        setBookings((previous) =>
-          previous.map(
-            (booking) =>
-              booking._id ===
-              bookingId
-                ? {
-                    ...booking,
-                    status:
-                      data.booking?.status ||
-                      status,
-                  }
-                : booking
-          )
+        setNotificationCount((previousCount) =>
+          Math.max(previousCount - 1, 0)
         );
-
-        if (
-          status ===
-          "confirmed"
-        ) {
-          setSuccess(
-            "Order accepted successfully."
-          );
-        }
-
-        if (
-          status ===
-          "completed"
-        ) {
-          setSuccess(
-            "Order marked as completed."
-          );
-        }
-
-        if (
-          status ===
-            "confirmed" &&
-          notificationCount > 0
-        ) {
-          setNotificationCount(
-            (previousCount) =>
-              Math.max(
-                previousCount - 1,
-                0
-              )
-          );
-        }
-      } catch (err) {
-        console.error(
-          "Update booking status error:",
-          err
-        );
-
-        setError(err.message);
       }
-    };
+
+      if (status === "completed") {
+        setSuccess("Order marked as completed.");
+      }
+    } catch (err) {
+      console.error("Update booking status error:", err);
+      setError(err.message || "Failed to update booking.");
+    }
+  };
 
   const viewOrders = () => {
     setShowNotification(false);
 
     const ordersSection =
-      document.getElementById(
-        "customer-orders"
-      );
+      document.getElementById("customer-orders");
 
     if (ordersSection) {
       ordersSection.scrollIntoView({
@@ -462,29 +323,19 @@ function ProfessionalDashboard() {
     }
   };
 
-  const pendingBookings =
-    bookings.filter(
-      (booking) =>
-        booking.status ===
-        "pending"
-    );
+  const pendingBookings = bookings.filter(
+    (booking) => booking.status === "pending"
+  );
 
-  const completedBookings =
-    bookings.filter(
-      (booking) =>
-        booking.status ===
-        "completed"
-    );
+  const completedBookings = bookings.filter(
+    (booking) => booking.status === "completed"
+  );
 
-  const totalEarnings =
-    completedBookings.reduce(
-      (total, booking) =>
-        total +
-        Number(
-          booking.amount || 0
-        ),
-      0
-    );
+  const totalEarnings = completedBookings.reduce(
+    (total, booking) =>
+      total + Number(booking.amount || 0),
+    0
+  );
 
   if (loading) {
     return (
@@ -505,89 +356,62 @@ function ProfessionalDashboard() {
             <h1 className="text-3xl font-bold text-slate-900">
               Professional Dashboard
             </h1>
-
             <p className="text-slate-600 mt-1">
-              Manage your FixIt
-              profile and customer
-              orders.
+              Manage your FixIt profile and customer orders.
             </p>
           </div>
 
           <div className="flex items-center gap-2 px-4 py-2 rounded-xl bg-white border border-slate-200 shadow-sm">
-            <Bell
-              size={20}
-              className="text-blue-600"
-            />
-
+            <Bell size={20} className="text-blue-600" />
             <span className="font-semibold text-slate-800">
               Notifications
             </span>
 
-            {notificationCount >
-              0 && (
+            {notificationCount > 0 && (
               <span className="min-w-6 h-6 px-2 rounded-full bg-red-500 text-white text-xs font-bold flex items-center justify-center">
-                {
-                  notificationCount
-                }
+                {notificationCount}
               </span>
             )}
           </div>
         </div>
 
         {/* Notification */}
-        {showNotification &&
-          notificationCount >
-            0 && (
-            <div className="mb-6 rounded-2xl border border-blue-200 bg-blue-50 p-5">
-              <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-                <div className="flex items-start gap-3">
-                  <Bell
-                    size={22}
-                    className="text-blue-600 mt-1"
-                  />
-
-                  <div>
-                    <h2 className="font-bold text-blue-900">
-                      New customer order
-                    </h2>
-
-                    <p className="text-sm text-blue-800 mt-1">
-                      You have a new
-                      booking waiting
-                      for your response.
-                    </p>
-                  </div>
-                </div>
-
-                <div className="flex gap-2">
-                  <button
-                    type="button"
-                    onClick={
-                      viewOrders
-                    }
-                    className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-blue-600 text-white font-semibold hover:bg-blue-700"
-                  >
-                    View Orders
-                    <ArrowDown
-                      size={16}
-                    />
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() =>
-                      setShowNotification(
-                        false
-                      )
-                    }
-                    className="px-4 py-2 rounded-lg bg-white border border-blue-200 text-blue-700 font-semibold hover:bg-blue-100"
-                  >
-                    Dismiss
-                  </button>
+        {showNotification && notificationCount > 0 && (
+          <div className="mb-6 rounded-2xl border border-blue-200 bg-blue-50 p-5">
+            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+              <div className="flex items-start gap-3">
+                <Bell size={22} className="text-blue-600 mt-1" />
+                <div>
+                  <h2 className="font-bold text-blue-900">
+                    New customer order
+                  </h2>
+                  <p className="text-sm text-blue-800 mt-1">
+                    You have a new booking waiting for your response.
+                  </p>
                 </div>
               </div>
+
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={viewOrders}
+                  className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-blue-600 text-white font-semibold hover:bg-blue-700"
+                >
+                  View Orders
+                  <ArrowDown size={16} />
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setShowNotification(false)}
+                  className="px-4 py-2 rounded-lg bg-white border border-blue-200 text-blue-700 font-semibold hover:bg-blue-100"
+                >
+                  Dismiss
+                </button>
+              </div>
             </div>
-          )}
+          </div>
+        )}
 
         {/* Error */}
         {error && (
@@ -611,25 +435,16 @@ function ProfessionalDashboard() {
                 <p className="text-sm font-medium text-slate-500">
                   Total Earnings
                 </p>
-
                 <p className="text-3xl font-bold text-slate-900 mt-2">
-                  ₹
-                  {totalEarnings.toLocaleString(
-                    "en-IN"
-                  )}
+                  ₹{totalEarnings.toLocaleString("en-IN")}
                 </p>
               </div>
-
               <div className="w-12 h-12 rounded-xl bg-green-100 flex items-center justify-center">
-                <span className="text-2xl">
-                  ₹
-                </span>
+                <span className="text-2xl">₹</span>
               </div>
             </div>
-
             <p className="text-sm text-slate-500 mt-3">
-              From completed
-              orders
+              From completed orders
             </p>
           </div>
 
@@ -639,25 +454,16 @@ function ProfessionalDashboard() {
                 <p className="text-sm font-medium text-slate-500">
                   Completed Jobs
                 </p>
-
                 <p className="text-3xl font-bold text-slate-900 mt-2">
-                  {
-                    completedBookings.length
-                  }
+                  {completedBookings.length}
                 </p>
               </div>
-
               <div className="w-12 h-12 rounded-xl bg-green-100 flex items-center justify-center">
-                <CheckCircle
-                  size={26}
-                  className="text-green-600"
-                />
+                <CheckCircle size={26} className="text-green-600" />
               </div>
             </div>
-
             <p className="text-sm text-slate-500 mt-3">
-              Successfully
-              completed
+              Successfully completed
             </p>
           </div>
 
@@ -667,25 +473,16 @@ function ProfessionalDashboard() {
                 <p className="text-sm font-medium text-slate-500">
                   Pending Orders
                 </p>
-
                 <p className="text-3xl font-bold text-slate-900 mt-2">
-                  {
-                    pendingBookings.length
-                  }
+                  {pendingBookings.length}
                 </p>
               </div>
-
               <div className="w-12 h-12 rounded-xl bg-yellow-100 flex items-center justify-center">
-                <Clock
-                  size={26}
-                  className="text-yellow-600"
-                />
+                <Clock size={26} className="text-yellow-600" />
               </div>
             </div>
-
             <p className="text-sm text-slate-500 mt-3">
-              Waiting for your
-              response
+              Waiting for your response
             </p>
           </div>
         </div>
@@ -697,30 +494,20 @@ function ProfessionalDashboard() {
               <h2 className="text-xl font-bold text-slate-900">
                 Earnings History
               </h2>
-
               <p className="text-slate-600 mt-1">
-                Earnings from your
-                completed customer
-                orders.
+                Earnings from your completed customer orders.
               </p>
             </div>
 
             <div className="text-left md:text-right">
-              <p className="text-sm text-slate-500">
-                Total earned
-              </p>
-
+              <p className="text-sm text-slate-500">Total earned</p>
               <p className="text-2xl font-bold text-green-600">
-                ₹
-                {totalEarnings.toLocaleString(
-                  "en-IN"
-                )}
+                ₹{totalEarnings.toLocaleString("en-IN")}
               </p>
             </div>
           </div>
 
-          {completedBookings.length ===
-          0 ? (
+          {completedBookings.length === 0 ? (
             <div className="text-center py-8 border border-dashed border-slate-300 rounded-xl">
               <p className="text-slate-500">
                 No completed jobs yet.
@@ -728,66 +515,40 @@ function ProfessionalDashboard() {
             </div>
           ) : (
             <div className="space-y-4">
-              {completedBookings.map(
-                (booking) => (
-                  <div
-                    key={booking._id}
-                    className="border border-slate-200 rounded-xl p-5"
-                  >
-                    <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-                      <div>
-                        <h3 className="font-bold text-slate-900">
-                          {
-                            booking.service
-                          }
-                        </h3>
+              {completedBookings.map((booking) => (
+                <div
+                  key={booking._id}
+                  className="border border-slate-200 rounded-xl p-5"
+                >
+                  <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+                    <div>
+                      <h3 className="font-bold text-slate-900">
+                        {booking.service}
+                      </h3>
+                      <p className="text-sm text-slate-600 mt-1">
+                        <strong>Customer:</strong>{" "}
+                        {booking.user?.name || "Unknown customer"}
+                      </p>
+                      <p className="text-sm text-slate-600 mt-1">
+                        <strong>Date:</strong> {booking.date}
+                      </p>
+                      <p className="text-sm text-slate-600 mt-1">
+                        <strong>Time:</strong> {booking.time}
+                      </p>
+                    </div>
 
-                        <p className="text-sm text-slate-600 mt-1">
-                          <strong>
-                            Customer:
-                          </strong>{" "}
-                          {booking.user
-                            ?.name ||
-                            "Unknown customer"}
-                        </p>
-
-                        <p className="text-sm text-slate-600 mt-1">
-                          <strong>
-                            Date:
-                          </strong>{" "}
-                          {booking.date}
-                        </p>
-
-                        <p className="text-sm text-slate-600 mt-1">
-                          <strong>
-                            Time:
-                          </strong>{" "}
-                          {booking.time}
-                        </p>
-                      </div>
-
-                      <div className="text-left md:text-right">
-                        <p className="text-xl font-bold text-green-600">
-                          ₹
-                          {Number(
-                            booking.amount ||
-                              0
-                          ).toLocaleString(
-                            "en-IN"
-                          )}
-                        </p>
-
-                        <span className="inline-flex items-center gap-1 mt-2 px-3 py-1 rounded-full bg-green-100 text-green-700 text-xs font-bold">
-                          <CheckCircle
-                            size={14}
-                          />
-                          Completed
-                        </span>
-                      </div>
+                    <div className="text-left md:text-right">
+                      <p className="text-xl font-bold text-green-600">
+                        ₹{Number(booking.amount || 0).toLocaleString("en-IN")}
+                      </p>
+                      <span className="inline-flex items-center gap-1 mt-2 px-3 py-1 rounded-full bg-green-100 text-green-700 text-xs font-bold">
+                        <CheckCircle size={14} />
+                        Completed
+                      </span>
                     </div>
                   </div>
-                )
-              )}
+                </div>
+              ))}
             </div>
           )}
         </div>
@@ -795,23 +556,12 @@ function ProfessionalDashboard() {
         {/* Pending Orders */}
         <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6 mb-8">
           <h2 className="text-xl font-bold text-slate-900">
-            Orders waiting for your
-            response
+            Orders waiting for your response
           </h2>
-
           <p className="text-slate-600 mt-1">
             You currently have{" "}
-            <strong>
-              {
-                pendingBookings.length
-              }
-            </strong>{" "}
-            pending customer{" "}
-            {pendingBookings.length ===
-            1
-              ? "order"
-              : "orders"}
-            .
+            <strong>{pendingBookings.length}</strong> pending customer{" "}
+            {pendingBookings.length === 1 ? "order" : "orders"}.
           </p>
         </div>
 
@@ -822,111 +572,100 @@ function ProfessionalDashboard() {
           </h2>
 
           <form
-            onSubmit={
-              handleUpdateProfile
-            }
+            onSubmit={handleUpdateProfile}
             className="grid grid-cols-1 md:grid-cols-2 gap-5"
           >
             <div>
-              <label className="block text-sm font-semibold text-slate-700 mb-2">
+              <label
+                htmlFor="professional-name"
+                className="block text-sm font-semibold text-slate-700 mb-2"
+              >
                 Professional Name
               </label>
-
               <input
+                id="professional-name"
                 type="text"
                 name="name"
-                value={
-                  formData.name
-                }
-                onChange={
-                  handleInputChange
-                }
+                value={formData.name}
+                onChange={handleInputChange}
                 className="w-full rounded-lg border border-slate-300 px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500"
                 required
               />
             </div>
 
             <div>
-              <label className="block text-sm font-semibold text-slate-700 mb-2">
+              <label
+                htmlFor="professional-service"
+                className="block text-sm font-semibold text-slate-700 mb-2"
+              >
                 Service
               </label>
-
               <input
+                id="professional-service"
                 type="text"
                 name="service"
-                value={
-                  formData.service
-                }
-                onChange={
-                  handleInputChange
-                }
+                value={formData.service}
+                onChange={handleInputChange}
                 className="w-full rounded-lg border border-slate-300 px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500"
                 required
               />
             </div>
 
             <div>
-              <label className="block text-sm font-semibold text-slate-700 mb-2">
+              <label
+                htmlFor="professional-experience"
+                className="block text-sm font-semibold text-slate-700 mb-2"
+              >
                 Years of Experience
               </label>
-
               <input
+                id="professional-experience"
                 type="number"
                 name="experience"
                 min="0"
-                value={
-                  formData.experience
-                }
-                onChange={
-                  handleInputChange
-                }
+                value={formData.experience}
+                onChange={handleInputChange}
                 className="w-full rounded-lg border border-slate-300 px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500"
                 required
               />
-
               <p className="text-xs text-slate-500 mt-1">
-                Enter the number
-                of years you
-                have worked
-                professionally
+                Enter the number of years you have worked professionally
                 in this service.
               </p>
             </div>
 
             <div>
-              <label className="block text-sm font-semibold text-slate-700 mb-2">
+              <label
+                htmlFor="professional-location"
+                className="block text-sm font-semibold text-slate-700 mb-2"
+              >
                 Location
               </label>
-
               <input
+                id="professional-location"
                 type="text"
                 name="location"
-                value={
-                  formData.location
-                }
-                onChange={
-                  handleInputChange
-                }
+                value={formData.location}
+                onChange={handleInputChange}
                 className="w-full rounded-lg border border-slate-300 px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500"
                 required
               />
             </div>
 
             <div>
-              <label className="block text-sm font-semibold text-slate-700 mb-2">
+              <label
+                htmlFor="professional-price"
+                className="block text-sm font-semibold text-slate-700 mb-2"
+              >
                 Price per hour
               </label>
-
               <input
+                id="professional-price"
                 type="number"
                 name="price"
                 min="0"
-                value={
-                  formData.price
-                }
-                onChange={
-                  handleInputChange
-                }
+                value={formData.price}
+                onChange={handleInputChange}
                 className="w-full rounded-lg border border-slate-300 px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500"
                 required
               />
@@ -934,37 +673,33 @@ function ProfessionalDashboard() {
 
             <div className="flex items-center gap-3 pt-8">
               <input
+                id="professional-availability"
                 type="checkbox"
                 name="availability"
-                checked={
-                  formData.availability
-                }
-                onChange={
-                  handleInputChange
-                }
+                checked={formData.availability}
+                onChange={handleInputChange}
                 className="w-5 h-5"
               />
-
-              <label className="text-sm font-semibold text-slate-700">
-                I am currently
-                available for
-                bookings
+              <label
+                htmlFor="professional-availability"
+                className="text-sm font-semibold text-slate-700"
+              >
+                I am currently available for bookings
               </label>
             </div>
 
             <div className="md:col-span-2">
-              <label className="block text-sm font-semibold text-slate-700 mb-2">
+              <label
+                htmlFor="professional-description"
+                className="block text-sm font-semibold text-slate-700 mb-2"
+              >
                 Description
               </label>
-
               <textarea
+                id="professional-description"
                 name="description"
-                value={
-                  formData.description
-                }
-                onChange={
-                  handleInputChange
-                }
+                value={formData.description}
+                onChange={handleInputChange}
                 rows="4"
                 className="w-full rounded-lg border border-slate-300 px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500"
                 required
@@ -992,10 +727,8 @@ function ProfessionalDashboard() {
               <h2 className="text-xl font-bold text-slate-900">
                 Customer Orders
               </h2>
-
               <p className="text-slate-600 mt-1">
-                Manage bookings from
-                your customers.
+                Manage bookings from your customers.
               </p>
             </div>
 
@@ -1006,155 +739,98 @@ function ProfessionalDashboard() {
             )}
           </div>
 
-          {bookings.length ===
-          0 ? (
+          {bookings.length === 0 ? (
             <div className="text-center py-10">
-              <p className="text-slate-500">
-                No customer orders
-                yet.
-              </p>
+              <p className="text-slate-500">No customer orders yet.</p>
             </div>
           ) : (
             <div className="space-y-5">
-              {bookings.map(
-                (booking) => (
-                  <div
-                    key={
-                      booking._id
-                    }
-                    className="border border-slate-200 rounded-xl p-5"
-                  >
-                    <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-4">
-                      <div>
-                        <h3 className="text-lg font-bold text-slate-900">
-                          {
-                            booking.service
-                          }
-                        </h3>
+              {bookings.map((booking) => (
+                <div
+                  key={booking._id}
+                  className="border border-slate-200 rounded-xl p-5"
+                >
+                  <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-4">
+                    <div>
+                      <h3 className="text-lg font-bold text-slate-900">
+                        {booking.service}
+                      </h3>
+                      <p className="text-slate-700 mt-2">
+                        <strong>Customer:</strong>{" "}
+                        {booking.user?.name || "Unknown customer"}
+                      </p>
 
-                        <p className="text-slate-700 mt-2">
-                          <strong>
-                            Customer:
-                          </strong>{" "}
-                          {booking.user
-                            ?.name ||
-                            "Unknown customer"}
+                      {booking.user?.email && (
+                        <p className="text-sm text-slate-500 mt-1">
+                          {booking.user.email}
                         </p>
+                      )}
 
-                        {booking.user
-                          ?.email && (
-                          <p className="text-sm text-slate-500 mt-1">
-                            {
-                              booking
-                                .user
-                                .email
-                            }
-                          </p>
-                        )}
-
-                        <p className="text-sm text-slate-600 mt-3">
-                          <strong>
-                            Date:
-                          </strong>{" "}
-                          {
-                            booking.date
-                          }
-                        </p>
-
-                        <p className="text-sm text-slate-600 mt-1">
-                          <strong>
-                            Time:
-                          </strong>{" "}
-                          {
-                            booking.time
-                          }
-                        </p>
-
-                        <p className="text-sm text-slate-600 mt-1">
-                          <strong>
-                            Amount:
-                          </strong>{" "}
-                          ₹
-                          {Number(
-                            booking.amount ||
-                              0
-                          ).toLocaleString(
-                            "en-IN"
-                          )}
-                        </p>
-                      </div>
-
-                      <div>
-                        <span
-                          className={`inline-flex px-3 py-1 rounded-full text-xs font-bold ${
-                            booking.status ===
-                            "completed"
-                              ? "bg-green-100 text-green-700"
-                              : booking.status ===
-                                "confirmed"
-                              ? "bg-blue-100 text-blue-700"
-                              : booking.status ===
-                                "cancelled"
-                              ? "bg-red-100 text-red-700"
-                              : "bg-yellow-100 text-yellow-700"
-                          }`}
-                        >
-                          {
-                            booking.status
-                          }
-                        </span>
-                      </div>
+                      <p className="text-sm text-slate-600 mt-3">
+                        <strong>Date:</strong> {booking.date}
+                      </p>
+                      <p className="text-sm text-slate-600 mt-1">
+                        <strong>Time:</strong> {booking.time}
+                      </p>
+                      <p className="text-sm text-slate-600 mt-1">
+                        <strong>Amount:</strong> ₹
+                        {Number(booking.amount || 0).toLocaleString("en-IN")}
+                      </p>
                     </div>
 
-                    {booking.status ===
-                      "pending" && (
-                      <div className="mt-5">
-                        <button
-                          type="button"
-                          onClick={() =>
-                            updateBookingStatus(
-                              booking._id,
-                              "confirmed"
-                            )
-                          }
-                          className="px-5 py-2.5 rounded-lg bg-blue-600 text-white font-semibold hover:bg-blue-700"
-                        >
-                          Accept Order
-                        </button>
-                      </div>
-                    )}
-
-                    {booking.status ===
-                      "confirmed" && (
-                      <div className="mt-5">
-                        <button
-                          type="button"
-                          onClick={() =>
-                            updateBookingStatus(
-                              booking._id,
-                              "completed"
-                            )
-                          }
-                          className="px-5 py-2.5 rounded-lg bg-green-600 text-white font-semibold hover:bg-green-700"
-                        >
-                          Mark as Completed
-                        </button>
-                      </div>
-                    )}
-
-                    {booking.status ===
-                      "completed" && (
-                      <div className="mt-4 flex items-center gap-2 text-green-700 font-semibold">
-                        <CheckCircle
-                          size={18}
-                        />
-                        This order has
-                        been completed.
-                      </div>
-                    )}
+                    <div>
+                      <span
+                        className={`inline-flex px-3 py-1 rounded-full text-xs font-bold ${
+                          booking.status === "completed"
+                            ? "bg-green-100 text-green-700"
+                            : booking.status === "confirmed"
+                              ? "bg-blue-100 text-blue-700"
+                              : booking.status === "cancelled"
+                                ? "bg-red-100 text-red-700"
+                                : "bg-yellow-100 text-yellow-700"
+                        }`}
+                      >
+                        {booking.status}
+                      </span>
+                    </div>
                   </div>
-                )
-              )}
+
+                  {booking.status === "pending" && (
+                    <div className="mt-5">
+                      <button
+                        type="button"
+                        onClick={() =>
+                          updateBookingStatus(booking._id, "confirmed")
+                        }
+                        className="px-5 py-2.5 rounded-lg bg-blue-600 text-white font-semibold hover:bg-blue-700"
+                      >
+                        Accept Order
+                      </button>
+                    </div>
+                  )}
+
+                  {booking.status === "confirmed" && (
+                    <div className="mt-5">
+                      <button
+                        type="button"
+                        onClick={() =>
+                          updateBookingStatus(booking._id, "completed")
+                        }
+                        className="px-5 py-2.5 rounded-lg bg-green-600 text-white font-semibold hover:bg-green-700"
+                      >
+                        Mark as Completed
+                      </button>
+                    </div>
+                  )}
+
+                  {booking.status === "completed" && (
+                    <div className="mt-4 flex items-center gap-2 text-green-700 font-semibold">
+                      <CheckCircle size={18} />
+                      This order has been completed.
+                    </div>
+                  )}
+                </div>
+              ))}
             </div>
           )}
         </div>

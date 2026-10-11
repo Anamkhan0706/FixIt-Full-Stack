@@ -1,9 +1,10 @@
-import { createContext, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { initialBookings } from "../data/mockData";
+import { AppContext } from "./AppContextBase";
 
-export const AppContext = createContext(null);
+const API_URL =
+  import.meta.env.VITE_API_URL || "http://localhost:5000/api";
 
-const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000/api";
 const STORAGE_KEY = "fixit_bookings_v1";
 
 export function AppProvider({ children }) {
@@ -21,7 +22,10 @@ export function AppProvider({ children }) {
 
   useEffect(() => {
     try {
-      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(bookings));
+      window.localStorage.setItem(
+        STORAGE_KEY,
+        JSON.stringify(bookings)
+      );
     } catch {
       // localStorage unavailable
     }
@@ -55,7 +59,10 @@ export function AppProvider({ children }) {
 
       return booking;
     } catch (err) {
-      const message = err.message || "Something went wrong while creating the booking.";
+      const message =
+        err.message ||
+        "Something went wrong while creating the booking.";
+
       setError(message);
       throw err;
     } finally {
@@ -83,9 +90,16 @@ export function AppProvider({ children }) {
         throw new Error(data.message || "Failed to cancel booking.");
       }
 
-      setBookings((prev) => prev.filter((booking) => booking.id !== id && booking._id !== id));
+      setBookings((prev) =>
+        prev.filter(
+          (booking) => booking.id !== id && booking._id !== id
+        )
+      );
     } catch (err) {
-      const message = err.message || "Something went wrong while cancelling the booking.";
+      const message =
+        err.message ||
+        "Something went wrong while cancelling the booking.";
+
       setError(message);
       throw err;
     } finally {
