@@ -1,6 +1,10 @@
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
+
 const User = require("../models/User");
+const Booking = require("../models/Booking");
+const Review = require("../models/Review");
+const Professional = require("../models/Professional");
 
 // Register a new user
 const register = async (req, res) => {
@@ -14,12 +18,17 @@ const register = async (req, res) => {
       });
     }
 
-    // Only "customer" or "professional" may be self-assigned at signup.
-    // "admin" can never be set this way, regardless of what the client sends.
+    // Only customer or professional roles can be selected at registration.
     const allowedRoles = ["customer", "professional"];
-    const assignedRole = allowedRoles.includes(role) ? role : "customer";
+    const assignedRole = allowedRoles.includes(role)
+      ? role
+      : "customer";
 
-    const existingUser = await User.findOne({ email });
+    const normalizedEmail = email.trim().toLowerCase();
+
+    const existingUser = await User.findOne({
+      email: normalizedEmail,
+    });
 
     if (existingUser) {
       return res.status(409).json({
@@ -32,12 +41,12 @@ const register = async (req, res) => {
 
     const user = await User.create({
       name,
-      email,
+      email: normalizedEmail,
       password: hashedPassword,
       role: assignedRole,
     });
 
-    res.status(201).json({
+    return res.status(201).json({
       success: true,
       message: "User registered successfully",
       user: {
@@ -48,10 +57,11 @@ const register = async (req, res) => {
       },
     });
   } catch (error) {
-    res.status(500).json({
+    console.error("Registration error:", error);
+
+    return res.status(500).json({
       success: false,
       message: "Registration failed",
-      error: error.message,
     });
   }
 };
@@ -68,7 +78,11 @@ const login = async (req, res) => {
       });
     }
 
-    const user = await User.findOne({ email });
+    const normalizedEmail = email.trim().toLowerCase();
+
+    const user = await User.findOne({
+      email: normalizedEmail,
+    });
 
     if (!user) {
       return res.status(401).json({
@@ -77,7 +91,10 @@ const login = async (req, res) => {
       });
     }
 
-    const isPasswordCorrect = await bcrypt.compare(password, user.password);
+    const isPasswordCorrect = await bcrypt.compare(
+      password,
+      user.password
+    );
 
     if (!isPasswordCorrect) {
       return res.status(401).json({
@@ -97,7 +114,7 @@ const login = async (req, res) => {
       }
     );
 
-    res.status(200).json({
+    return res.status(200).json({
       success: true,
       message: "Login successful",
       token,
@@ -109,10 +126,89 @@ const login = async (req, res) => {
       },
     });
   } catch (error) {
-    res.status(500).json({
+    console.error("Login error:", error);
+
+    return res.status(500).json({
       success: false,
       message: "Login failed",
-      error: error.message,
+    });
+  }
+};
+
+// Delete the authenticated customer's account
+const deleteAccount = async (req, res) => {
+  try {
+    // Only customer accounts can use this endpoint.
+    if (req.user.role !== "customer") {
+      return res.status(403).json({
+        success: false,
+        message:
+          "Only customer accounts can be deleted through this endpoint",
+      });
+    }
+
+    // Identify the account using the verified JWT.
+    const user = await User.findById(req.user.userId);
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "Account not found",
+      });
+    }
+
+    // Prevent deletion when booking history exists.
+    const existingBooking = await Booking.exists({
+      user: user._id,
+    });
+
+    if (existingBooking) {
+      return res.status(409).json({
+        success: false,
+        message:
+          "Account cannot be deleted while bookings exist. Resolve the booking records first.",
+      });
+    }
+
+    // Prevent orphaned reviews.
+    const existingReview = await Review.exists({
+      customer: user._id,
+    });
+
+    if (existingReview) {
+      return res.status(409).json({
+        success: false,
+        message:
+          "Account cannot be deleted while reviews exist. Resolve the review records first.",
+      });
+    }
+
+    // Protect accounts connected to professional profiles.
+    const existingProfessional = await Professional.exists({
+      user: user._id,
+    });
+
+    if (existingProfessional) {
+      return res.status(409).json({
+        success: false,
+        message:
+          "Account is linked to a professional profile and cannot be deleted through this endpoint.",
+      });
+    }
+
+    // Delete only the authenticated user's account.
+    await User.findByIdAndDelete(user._id);
+
+    return res.status(200).json({
+      success: true,
+      message: "Customer account deleted successfully",
+    });
+  } catch (error) {
+    console.error("Delete account error:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Failed to delete account",
     });
   }
 };
@@ -120,4 +216,5 @@ const login = async (req, res) => {
 module.exports = {
   register,
   login,
+  deleteAccount,
 };
