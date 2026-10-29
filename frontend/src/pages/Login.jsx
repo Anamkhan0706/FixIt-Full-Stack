@@ -92,8 +92,8 @@ export default function Login() {
         );
       }
 
-      // Every user goes to the main FixIt home page after login.
-      navigate("/");
+      // Reload the app so its routes read the newly saved token.
+      window.location.href = "/";
     } catch (error) {
       setApiError(
         error.message ||
