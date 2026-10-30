@@ -217,12 +217,12 @@ http://localhost:5000/api
 
 ### Main API Areas
 
-| API Area       | Purpose                                                                 |
-| -------------- | ----------------------------------------------------------------------- |
-| Authentication | User registration and login                                             |
-| Professionals  | Retrieve service professional information                               |
-| Bookings       | Create, retrieve, update, and delete authorized bookings                |
-| Reviews        | Submit reviews for completed bookings and retrieve professional reviews |
+| API Area | Purpose |
+|---|---|
+| Authentication | User registration and login |
+| Professionals | Retrieve service professional information |
+| Bookings | Create, retrieve, update, and delete authorized bookings |
+| Reviews | Submit reviews for completed bookings and retrieve professional reviews |
 
 Protected endpoints use authentication middleware. Role-based restrictions and validation help prevent unauthorized operations.
 
@@ -303,9 +303,13 @@ cd backend
 npm test
 ```
 
-During development, the backend test suite passed **26 tests across 3 test suites**.
+The latest verified backend test run passed **29 tests across 3 test suites** using:
 
-The tests cover backend functionality, including authentication-related workflows and booking operations. Results may differ if the code or configuration changes.
+```bash
+npm test -- --runInBand
+```
+
+The suites cover authentication, bookings, and professionals. The frontend was previously verified with a successful Vite production build and four frontend tests. Those frontend results are from the earlier Week 5 verification.
 
 To verify that the frontend can be built for production:
 
@@ -373,7 +377,7 @@ Potential future improvements include:
 * Email and in-app notifications.
 * Advanced search and filtering.
 * Professional availability calendars.
-* Production deployment.
+* Additional production improvements and monitoring.
 * Additional frontend automated tests.
 * Administrative reporting and service management.
 
@@ -391,6 +395,97 @@ These are proposed enhancements and are not represented as currently implemented
 
 ## 19. Conclusion
 
-FixIt demonstrates the development of a full-stack home-services booking platform using React, Node.js, Express.js, and MongoDB. It integrates professional discovery, customer bookings, professional order management, earnings tracking, ratings, and reviews.
+FixIt demonstrates the development and public deployment of a full-stack home-services booking platform using React, Node.js, Express.js, and MongoDB. It integrates professional discovery, customer bookings, professional order management, earnings tracking, ratings, and reviews.
 
-The project also demonstrates RESTful API integration, JWT authentication, role-based authorization, request validation, error handling, and automated backend testing. The combined repository contains the frontend and backend source code, documentation, configuration examples, and test files in one place.
+The project also demonstrates RESTful API integration, JWT authentication, role-based authorization, request validation, error handling, automated backend testing, and deployment using Vercel, Render, and MongoDB Atlas. The combined repository contains the frontend and backend source code, documentation, configuration examples, and test files in one place.
+
+## 20. Production Deployment
+
+FixIt is publicly deployed using separate hosting services for the frontend and backend.
+
+| Component | Hosting | Production URL |
+|---|---|---|
+| Frontend | Vercel | https://fix-it-full-stack.vercel.app/ |
+| Backend API | Render | https://fixit-backend-qm74.onrender.com/api |
+| Database | MongoDB Atlas | Managed database; connection details are private |
+
+### Production Architecture
+
+The React/Vite frontend is deployed on Vercel. It sends API requests to the Express backend deployed on Render. The backend connects to MongoDB Atlas for persistent data storage.
+
+### Frontend Deployment (Vercel)
+
+1. Import the GitHub repository into Vercel.
+2. Set the project root directory to `frontend`.
+3. Configure the Vite build command as `npm run build` and the output directory as `dist`.
+4. Add the production environment variable `VITE_API_URL` with the value:
+
+   `https://fixit-backend-qm74.onrender.com/api`
+
+5. Deploy or redeploy the project after changing environment variables, because Vite embeds them during the build.
+6. Open the public frontend and verify that login and API-backed pages work.
+
+### Backend Deployment (Render)
+
+1. Create a Render Web Service connected to the GitHub repository.
+2. Set the root directory to `backend`.
+3. Use `npm install` as the build command and `npm start` as the start command.
+4. Configure `MONGO_URI` and `JWT_SECRET` in Render's environment settings. Use the hosting platform's `PORT` value where applicable.
+5. Deploy and inspect the service logs. Confirm that the server starts and MongoDB connects successfully.
+6. Configure the frontend to use the deployed API base URL.
+
+### Production Environment Variables
+
+| Variable | Service | Purpose |
+|---|---|---|
+| `VITE_API_URL` | Vercel frontend | Backend API base URL, including `/api` |
+| `MONGO_URI` | Render backend | MongoDB Atlas connection URI |
+| `JWT_SECRET` | Render backend | Secret used for JWT signing and verification |
+| `PORT` | Render backend | HTTP port supplied/configured by the hosting platform |
+
+**Security:** Actual values for `MONGO_URI` and `JWT_SECRET` must never be committed to GitHub or included in screenshots, issue reports, or public documentation. Store them in the hosting provider's environment-variable settings. The repository's `.env.example` files should contain placeholders only.
+
+### Deployment Troubleshooting
+
+- **Frontend cannot reach the API:** Check `VITE_API_URL`, confirm it ends in `/api`, verify the backend is running, and confirm the backend CORS configuration permits the deployed frontend origin. Redeploy the frontend after changing the variable.
+- **Backend does not start:** Check the Render logs, root directory, build command, start command, and required environment variables.
+- **MongoDB connection fails:** Verify the private `MONGO_URI`, database user permissions, and MongoDB Atlas network access configuration.
+- **First request is slow:** A free hosting instance may sleep after inactivity and take time to start. Retry after the service wakes and inspect logs if it remains unavailable.
+- **Authentication returns 401:** Sign in again and verify that the request includes a valid bearer token. Never share the token publicly.
+- **Latest changes are missing:** Confirm the intended Git branch and commit were deployed. Rebuild the frontend after changing Vite environment variables.
+
+## 21. Production Verification and Maintenance
+
+### Production Verification
+
+The public frontend was opened successfully, and a user was able to log in and reach the home page. The deployed backend was reachable. An unauthenticated request to the protected account-deletion endpoint returned HTTP `401`, as expected when a valid authentication token is not provided.
+
+The backend test suite passed 29 tests across 3 suites. The account-deletion feature is restricted to authenticated customers and prevents deletion when related booking, review, or professional records exist. Automated tests cover unauthenticated access, successful deletion in the test database, and rejection of professional-account deletion. No production account was deleted during verification.
+
+### Maintenance Checklist
+
+- Review Render and Vercel deployment logs after each release.
+- Run backend tests and the frontend production build before deploying changes.
+- Check the public site and key customer/professional workflows after deployment.
+- Keep secrets in hosting environment settings and rotate them if exposure is suspected.
+- Review dependency audit findings and apply updates carefully, followed by tests.
+- Review MongoDB Atlas network access and use least-privilege database credentials.
+- Verify which backup and recovery features are enabled for the Atlas plan; perform restore tests before relying on backups.
+- Avoid logging passwords, JWTs, database URIs, or other sensitive values.
+
+The latest Render deployment log reported seven dependency audit findings (five low, one moderate, and one high). These should be reviewed and resolved through tested dependency updates. MongoDB Atlas backup settings should also be checked directly; this README does not claim that a particular backup schedule is enabled.
+
+## 22. Demo
+
+**Live Application:** https://fix-it-full-stack.vercel.app/
+
+**Demo Video:** https://drive.google.com/file/d/18jvriIfj5lkJLydTz1aEKceWbRh5Uhxy/view?usp=drive_link
+
+Make sure the video sharing permission allows the evaluator to view it.
+
+## 23. Repository and Submission Links
+
+- **GitHub repository:** https://github.com/Anamkhan0706/FixIt-Full-Stack
+- **Live frontend:** https://fix-it-full-stack.vercel.app/
+- **Backend API:** https://fixit-backend-qm74.onrender.com/api
+- **Demo video:** https://drive.google.com/file/d/18jvriIfj5lkJLydTz1aEKceWbRh5Uhxy/view?usp=drive_link
