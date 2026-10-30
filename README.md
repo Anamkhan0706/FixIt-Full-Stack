@@ -479,7 +479,7 @@ The latest Render deployment log reported seven dependency audit findings (five 
 
 **Live Application:** https://fix-it-full-stack.vercel.app/
 
-**Demo Video:** https://drive.google.com/file/d/18jvriIfj5lkJLydTz1aEKceWbRh5Uhxy/view?usp=drive_link
+**Demo Video:** https://drive.google.com/file/d/15f7GmtvdU96wlR0Bv32bj3HPDyM9VReP/view?usp=drive_link
 
 Make sure the video sharing permission allows the evaluator to view it.
 
@@ -488,4 +488,4 @@ Make sure the video sharing permission allows the evaluator to view it.
 - **GitHub repository:** https://github.com/Anamkhan0706/FixIt-Full-Stack
 - **Live frontend:** https://fix-it-full-stack.vercel.app/
 - **Backend API:** https://fixit-backend-qm74.onrender.com/api
-- **Demo video:** https://drive.google.com/file/d/18jvriIfj5lkJLydTz1aEKceWbRh5Uhxy/view?usp=drive_link
+- **Demo video:** https://drive.google.com/file/d/15f7GmtvdU96wlR0Bv32bj3HPDyM9VReP/view?usp=drive_link
